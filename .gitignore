@@ -1,0 +1,20 @@
+# Dependencies
+node_modules/
+
+# Skills CLI generated folders (local project install)
+.agent/
+.agents/
+.claude/
+.cline/
+.codex/
+.cursor/
+.gemini/
+.kiro/
+.opencode/
+skills/
+
+# GitHub Copilot skill config (if generated)
+.github/skills/
+
+# OS
+.DS_Store
