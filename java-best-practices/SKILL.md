@@ -65,9 +65,12 @@ Use switch expressions (not statements) with pattern matching. Prefer exhaustive
 ```java
 // CORRECT
 String message = switch (result) {
-    case PaymentSuccess s -> "Paid %s".formatted(s.amount());
-    case PaymentFailure f -> "Failed: %s".formatted(f.reason());
-    case PaymentPending p -> "Pending: %s".formatted(p.transactionId());
+    case PaymentSuccess success ->
+        "Paid %s".formatted(success.amount());
+    case PaymentFailure failure ->
+        "Failed: %s".formatted(failure.reason());
+    case PaymentPending pending ->
+        "Pending: %s".formatted(pending.transactionId());
 };
 
 // WRONG — old-style switch statement with break
@@ -77,6 +80,24 @@ switch (result.getType()) {
         break;
     // ...
 }
+```
+
+### Null Handling Inside `switch` (Java 21+)
+
+```java
+// CORRECT — null is an explicit case
+return switch (status) {
+    case null -> "unknown";
+    case ACTIVE -> "active";
+    case PAUSED -> "paused";
+};
+
+// WRONG — null handled outside the switch
+if (status == null) return "unknown";
+return switch (status) {
+    case ACTIVE -> "active";
+    case PAUSED -> "paused";
+};
 ```
 
 ### Pattern Matching for `instanceof`
@@ -147,15 +168,13 @@ Use `_` for unused variables, catch parameters, and lambda parameters.
 
 ```java
 // CORRECT
-catch (Exception _) { ... }
-
+try { ... } catch (Exception _) { ... }
 try (var _ = ScopedValue.where(KEY, value)) { ... }
-
 list.stream().map(_ -> "constant").toList();
 
 // WRONG
-catch (Exception ignored) { ... }
-catch (Exception e) { ... } // when e is never used
+try { ... } catch (Exception ignored) { ... }
+try { ... } catch (Exception e) { ... } // when e is never used
 ```
 
 ### Immutable Collections
@@ -181,13 +200,13 @@ Use `getFirst()`, `getLast()`, `reversed()` instead of index arithmetic.
 ```java
 // CORRECT
 var first = list.getFirst();
-var last  = list.getLast();
-var rev   = list.reversed();
+var last = list.getLast();
+var rev = list.reversed();
 
 // WRONG
 var first = list.get(0);
-var last  = list.get(list.size() - 1);
-var rev   = new ArrayList<>(list); Collections.reverse(rev);
+var last = list.get(list.size() - 1);
+var rev = new ArrayList<>(list); Collections.reverse(rev);
 ```
 
 ### String Utilities (Java 11+)
@@ -407,7 +426,7 @@ Use `StructuredTaskScope` to manage lifetimes of forked subtasks as a unit. Ensu
 ```java
 // CORRECT
 try (var scope = new StructuredTaskScope.ShutdownOnFailure()) {
-    var user  = scope.fork(() -> fetchUser(id));
+    var user = scope.fork(() -> fetchUser(id));
     var order = scope.fork(() -> fetchOrder(id));
     scope.join().throwIfFailed();
     return new Response(user.get(), order.get());
@@ -427,7 +446,7 @@ return new Response(f1.get(), f2.get());
 - Avoid `CompletableFuture` chains when Virtual Threads can express the same logic sequentially.
 - Do not prematurely introduce reactive patterns. Use them only when you have proven back-pressure requirements.
 
-## Modern I/O (Java 11+)
+## Modern I/O
 
 Use `Files` convenience methods and `Path.of()` factory. Avoid `BufferedReader`/`Writer` boilerplate for simple operations.
 
@@ -447,8 +466,8 @@ Use the built-in `HttpClient` for HTTP calls. Do not add `HttpURLConnection` boi
 
 ```java
 // CORRECT
-var client   = HttpClient.newHttpClient();
-var request  = HttpRequest.newBuilder(URI.create(url)).GET().build();
+var client = HttpClient.newHttpClient();
+var request = HttpRequest.newBuilder(URI.create(url)).GET().build();
 var response = client.send(request, HttpResponse.BodyHandlers.ofString());
 
 // WRONG — HttpURLConnection with manual stream handling
@@ -464,11 +483,11 @@ Always use `java.time` (Java 8+). Never use `Date`, `Calendar`, or `SimpleDateFo
 
 ```java
 // CORRECT
-LocalDate  today    = LocalDate.now();
-LocalDate  date     = LocalDate.of(2025, Month.JANUARY, 15);
-Instant    now      = Instant.now();
+LocalDate today = LocalDate.now();
+LocalDate date = LocalDate.of(2025, Month.JANUARY, 15);
+Instant now = Instant.now();
 long days = ChronoUnit.DAYS.between(start, end);
-Duration   duration = Duration.ofMinutes(30);
+Duration duration = Duration.ofMinutes(30);
 
 // WRONG
 Date date = new Date();
