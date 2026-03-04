@@ -120,6 +120,44 @@ var mapper = new ObjectMapper();
 var result = process(data);
 ```
 
+### Record Patterns (Java 21)
+
+Destructure records directly in `instanceof` and `switch` expressions.
+
+```java
+// CORRECT
+if (obj instanceof Point(int x, int y)) {
+    System.out.println(x + ", " + y);
+}
+
+String desc = switch (shape) {
+    case Circle(double r) -> "Circle r=" + r;
+    case Rect(double w, double h) -> "Rect " + w + "x" + h;
+};
+
+// WRONG — old style: cast + field access
+if (obj instanceof Point p) {
+    System.out.println(p.x() + ", " + p.y());
+}
+```
+
+### Unnamed Variables (Java 22)
+
+Use `_` for unused variables, catch parameters, and lambda parameters.
+
+```java
+// CORRECT
+catch (Exception _) { ... }
+
+try (var _ = ScopedValue.where(KEY, value)) { ... }
+
+list.stream().map(_ -> "constant").toList();
+
+// WRONG
+catch (Exception ignored) { ... }
+catch (Exception e) { ... } // when e is never used
+```
+
 ### Immutable Collections
 
 Use factory methods for immutable collections. Never use `Arrays.asList()` or `new ArrayList<>()` for fixed collections.
@@ -134,6 +172,39 @@ var tags = Set.of("java", "backend");
 var roles = Arrays.asList("ADMIN", "USER");
 var roles = new ArrayList<>(List.of("ADMIN", "USER"));
 var roles = Collections.unmodifiableList(Arrays.asList("ADMIN", "USER"));
+```
+
+### Sequenced Collections (Java 21)
+
+Use `getFirst()`, `getLast()`, `reversed()` instead of index arithmetic.
+
+```java
+// CORRECT
+var first = list.getFirst();
+var last  = list.getLast();
+var rev   = list.reversed();
+
+// WRONG
+var first = list.get(0);
+var last  = list.get(list.size() - 1);
+var rev   = new ArrayList<>(list); Collections.reverse(rev);
+```
+
+### String Utilities (Java 11+)
+
+Use modern `String` methods. Do not reimplement what the standard library already provides.
+
+```java
+// CORRECT
+str.isBlank()               // replaces str.trim().isEmpty()
+str.strip()                 // Unicode-aware trim
+"ha".repeat(3)              // "hahaha"
+"Hello %s".formatted(name) // replaces String.format(...)
+str.lines()                 // Stream<String> of lines
+
+// WRONG
+str.trim().isEmpty()
+String.format("Hello %s", name)
 ```
 
 ## Null Safety
@@ -182,6 +253,18 @@ User user = userService.findByEmail(email).get();
 - **Never swallow exceptions.** Always log or rethrow.
 - **Never catch `Exception` or `Throwable`** generically unless at the top-level error boundary (e.g., controller advice, global handler).
 - Use specific exception types. Create custom domain exceptions when the standard ones do not fit.
+- Use **multi-catch** to avoid duplicated catch blocks.
+
+```java
+// CORRECT
+catch (IOException | SQLException e) {
+    log.error("Data access failed", e);
+}
+
+// WRONG — duplicated handlers
+catch (IOException e) { log.error("...", e); }
+catch (SQLException e) { log.error("...", e); }
+```
 
 ```java
 // CORRECT
@@ -317,11 +400,81 @@ Mono.fromCallable(() -> fetchData(url))
 
 Writing proper OOP with small, immutable objects in small methods with limited scope is the best concurrency strategy. Small objects are created and garbage-collected quickly, reducing contention.
 
+### Structured Concurrency (Java 25)
+
+Use `StructuredTaskScope` to manage lifetimes of forked subtasks as a unit. Ensures that subtasks are reliably cancelled and joined when the scope closes.
+
+```java
+// CORRECT
+try (var scope = new StructuredTaskScope.ShutdownOnFailure()) {
+    var user  = scope.fork(() -> fetchUser(id));
+    var order = scope.fork(() -> fetchOrder(id));
+    scope.join().throwIfFailed();
+    return new Response(user.get(), order.get());
+}
+
+// WRONG — manual executor management, no automatic lifecycle
+var executor = Executors.newFixedThreadPool(2);
+var f1 = executor.submit(() -> fetchUser(id));
+var f2 = executor.submit(() -> fetchOrder(id));
+executor.shutdown();
+return new Response(f1.get(), f2.get());
+```
+
 ### What NOT to Use
 
 - **Do NOT use RxJava.** It is overly complex, hard to debug, and unnecessary with Virtual Threads. If you are in a project that uses RxJava, do not introduce more of it.
 - Avoid `CompletableFuture` chains when Virtual Threads can express the same logic sequentially.
 - Do not prematurely introduce reactive patterns. Use them only when you have proven back-pressure requirements.
+
+## Modern I/O (Java 11+)
+
+Use `Files` convenience methods and `Path.of()` factory. Avoid `BufferedReader`/`Writer` boilerplate for simple operations.
+
+```java
+// CORRECT
+String content = Files.readString(Path.of("config.json"));
+Files.writeString(Path.of("output.txt"), data);
+var path = Path.of("src", "main", "java");
+
+// WRONG
+var br = new BufferedReader(new FileReader("config.json"));
+// ... manual read loop ...
+var path = Paths.get("src", "main", "java");
+```
+
+Use the built-in `HttpClient` for HTTP calls. Do not add `HttpURLConnection` boilerplate.
+
+```java
+// CORRECT
+var client   = HttpClient.newHttpClient();
+var request  = HttpRequest.newBuilder(URI.create(url)).GET().build();
+var response = client.send(request, HttpResponse.BodyHandlers.ofString());
+
+// WRONG — HttpURLConnection with manual stream handling
+var conn = (HttpURLConnection) new URL(url).openConnection();
+conn.setRequestMethod("GET");
+var reader = new BufferedReader(new InputStreamReader(conn.getInputStream()));
+// ...
+```
+
+## Date and Time
+
+Always use `java.time` (Java 8+). Never use `Date`, `Calendar`, or `SimpleDateFormat`.
+
+```java
+// CORRECT
+LocalDate  today    = LocalDate.now();
+LocalDate  date     = LocalDate.of(2025, Month.JANUARY, 15);
+Instant    now      = Instant.now();
+long days = ChronoUnit.DAYS.between(start, end);
+Duration   duration = Duration.ofMinutes(30);
+
+// WRONG
+Date date = new Date();
+Calendar cal = Calendar.getInstance();
+cal.set(2025, 0, 15); // zero-indexed months
+```
 
 ## Logging
 
@@ -377,3 +530,13 @@ These patterns are outdated and must not be used in new code:
 | Raw types (`List` instead of `List<String>`) | Always use generics |
 | `Date`, `Calendar` | `java.time` API (`LocalDate`, `Instant`, etc.) |
 | `StringBuffer` | `StringBuilder` (or text blocks / `formatted()`) |
+| `str.trim().isEmpty()` | `str.isBlank()` |
+| `String.format(...)` | `"...".formatted(...)` |
+| `list.get(list.size() - 1)` | `list.getLast()` |
+| `Collections.reverse(new ArrayList<>(list))` | `list.reversed()` |
+| `catch (Exception ignored)` | `catch (Exception _)` |
+| Duplicate `catch` blocks | Multi-catch `catch (A \| B e)` |
+| `BufferedReader` + loop for file reading | `Files.readString(Path.of(...))` |
+| `Paths.get(...)` | `Path.of(...)` |
+| `HttpURLConnection` | `HttpClient` (Java 11) |
+| Manual executor lifecycle for structured tasks | `StructuredTaskScope` (Java 25) |
