@@ -241,13 +241,26 @@ for (User user : users) {
 }
 ```
 
-Do not use streams for side effects. If you need side effects, use a loop.
+Never perform side effects in intermediate operations (like `map`, `filter`, `flatMap`) — these should be pure functions. Terminal `forEach` is the right place for side effects. Prefer `Iterable.forEach()` over `stream().forEach()` when no intermediate operations are needed.
 
 ```java
-// WRONG — stream for side effects
+// WRONG — side effect in intermediate operation
+users.stream()
+    .map(user -> { emailService.send(user); return user.email(); })
+    .toList();
+
+// WRONG — unnecessary stream() when there is no pipeline
 users.stream().forEach(user -> emailService.send(user));
 
-// CORRECT — plain loop for side effects
+// CORRECT — Iterable.forEach for simple side effects
+users.forEach(user -> emailService.send(user));
+
+// CORRECT — pure filter, side effect only in terminal forEach
+users.stream()
+    .filter(User::isActive)
+    .forEach(user -> emailService.send(user));
+
+// CORRECT — plain loop when you need break/continue or checked exceptions
 for (var user : users) {
     emailService.send(user);
 }
